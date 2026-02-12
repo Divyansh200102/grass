@@ -3,7 +3,6 @@ import subprocess
 import sys
 
 import pytest
-import pathlib
 from grass.app.cli import main
 
 
