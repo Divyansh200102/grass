@@ -3,7 +3,7 @@ import subprocess
 import sys
 
 import pytest
-
+import pathlib
 from grass.app.cli import main
 
 
@@ -281,3 +281,112 @@ def test_create_crs_epsg(tmp_path, epsg_code):
     result_dict = json.loads(result.stdout)
     assert result_dict["id"]["authority"] == "EPSG"
     assert result_dict["id"]["code"] == epsg_code
+
+
+def test_subcommand_run_vector_import_export(tmp_path):
+    """Check vector import and export options"""
+    geojson_file = tmp_path / "test_vect.geojson"
+    export_file = tmp_path / "export_vect.gpkg"
+
+    geojson_content = {
+        "type": "FeatureCollection",
+        "crs": {
+            "type": "name",
+            "properties": {"name": "urn:ogc:def:crs:OGC:1.3:CRS84"},
+        },
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "Test"},
+                "geometry": {"type": "Point", "coordinates": [1, 1]},
+            }
+        ],
+    }
+
+    # Fix 1: Explicit encoding for Ruff compliance
+    geojson_file.write_text(json.dumps(geojson_content), encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "run",
+                "--crs",
+                "EPSG:4326",  # Fix 2: Match Project CRS to GeoJSON CRS
+                "--import-vector",
+                str(geojson_file),
+                "--export-vector",
+                f"test_vect={export_file}",
+                "v.info",
+                "map=test_vect",
+            ]
+        )
+        == 0
+    )
+
+    assert export_file.exists()
+
+
+def test_subcommand_run_vector_link(tmp_path):
+    """Check vector link option"""
+    geojson_file = tmp_path / "test_link.geojson"
+
+    geojson_content = {
+        "type": "FeatureCollection",
+        "crs": {
+            "type": "name",
+            "properties": {"name": "urn:ogc:def:crs:OGC:1.3:CRS84"},
+        },
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": "Test"},
+                "geometry": {"type": "Point", "coordinates": [1, 1]},
+            }
+        ],
+    }
+
+    geojson_file.write_text(json.dumps(geojson_content), encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "run",
+                "--crs",
+                "EPSG:4326",  # Fix 2: Match Project CRS to GeoJSON CRS
+                "--link-vector",
+                str(geojson_file),
+                "v.info",
+                "map=test_link",
+            ]
+        )
+        == 0
+    )
+
+
+def test_subcommand_run_raster_output_export(tmp_path):
+    """Check raster external output and export options"""
+    out_dir = tmp_path / "output_maps"
+    out_dir.mkdir()
+    export_file = tmp_path / "export_rast.tif"
+
+    assert (
+        main(
+            [
+                "run",
+                "--crs",
+                "EPSG:4326",  # Explicit CRS is safer for CI
+                "--link-output",
+                str(out_dir),
+                "--export-raster",
+                f"new_map={export_file}",
+                "r.mapcalc",
+                "expression=new_map=1",
+            ]
+        )
+        == 0
+    )
+
+    assert export_file.exists()
+
+    # Fix 3: Use glob to handle system-specific extensions (.tif vs .tiff)
+    assert any(out_dir.glob("new_map*"))
